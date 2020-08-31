@@ -1,0 +1,1177 @@
+local LOCAL_PLAYER = game.Players.LocalPlayer
+local MOUSE = LOCAL_PLAYER:GetMouse()
+
+local INPUT_SERVICE = game:GetService("UserInputService")
+
+local SCRIPT_ENABLED = true
+
+local APPLICATION_GUI_PARENT = game:GetService("RunService"):IsStudio() and game.Players.LocalPlayer.PlayerGui or game.CoreGui
+local APPLICATION_SIZE = UDim2.new(0, 380, 0, 190)
+local APPLICATION_MINIMIZED = false
+
+local ELEMENT_CONTAINER_EXTRA_PADDING = -8
+local ELEMENT_CONTAINER_HEIGHT = 19
+local ELEMENT_TITLE_PADDING = 10
+local SLIDER_MAX_DECIMAL_PLACES = 2
+
+local DEFAULT_AIMBOT_KEY = Enum.KeyCode.LeftControl
+
+local APPLICATION_THEME = {}
+do
+	APPLICATION_THEME.TextColor = Color3.fromRGB(255, 255, 255)
+	APPLICATION_THEME.Padding_TextColor = Color3.fromRGB(100, 120, 190)
+	
+	APPLICATION_THEME.TextFont_Standard = Enum.Font.Gotham
+	APPLICATION_THEME.TextFont_SemiBold = Enum.Font.GothamSemibold
+	APPLICATION_THEME.TextFont_Bold = Enum.Font.GothamBold
+	
+	APPLICATION_THEME.Cursor_Color = Color3.new(1, 1, 1)
+	
+	APPLICATION_THEME.Color_Light = Color3.fromRGB(45, 45, 45)
+	APPLICATION_THEME.Color_Medium = Color3.fromRGB(30, 30, 30)
+	APPLICATION_THEME.Color_Dark = Color3.fromRGB(15, 15, 15)
+	
+	APPLICATION_THEME.Slider_Background_Color = Color3.fromRGB(60, 60, 60)
+	APPLICATION_THEME.Slider_Bar_Color = Color3.fromRGB(190, 190, 190)
+	
+	APPLICATION_THEME.Keybind_Engaged_Color = Color3.fromRGB(110, 40, 40)
+	APPLICATION_THEME.Keybind_NotEngaged_Color = Color3.fromRGB(30, 30, 30)
+	
+	APPLICATION_THEME.Button_Engaged_Color = Color3.fromRGB(110, 40, 40)
+	APPLICATION_THEME.Button_NotEngaged_Color = Color3.fromRGB(30, 30, 30)
+	
+	APPLICATION_THEME.Input_Background_Color = Color3.fromRGB(30, 30, 30)
+	
+	APPLICATION_THEME.Switch_Background_Color = Color3.fromRGB(60, 60, 60)
+	APPLICATION_THEME.Switch_Knob_Color = Color3.fromRGB(220, 220, 220)
+	APPLICATION_THEME.Switch_Off_Color = Color3.fromRGB(30, 30, 30)
+	APPLICATION_THEME.Switch_On_Color = Color3.fromRGB(30, 120, 190)
+end
+
+-- Functions
+local function Lerp(start, finish, alpha)
+	return start * (1 - alpha) + (finish * alpha)
+end
+
+-- Gui Functions
+local function CreateGui(parent, name, resetOnSpawn, ignoreGuiInset)
+	local gui = Instance.new("ScreenGui", parent)
+	gui.Name = name
+	
+	gui.IgnoreGuiInset = ignoreGuiInset
+	gui.ResetOnSpawn = resetOnSpawn
+	
+	return gui
+end
+
+local function AddPadding(parent, size, text)
+	local paddingText = text ~= nil and text or ""
+	
+	local padding = Instance.new("TextButton", parent)
+	padding.Name = "Padding"
+	padding.BackgroundTransparency = 1
+	padding.BorderSizePixel = 0
+	padding.Size = UDim2.new(1, 0, 0, size)
+	padding.Font = APPLICATION_THEME.TextFont_SemiBold
+	padding.TextColor3 = APPLICATION_THEME.Padding_TextColor
+	padding.TextSize = 12
+	padding.TextXAlignment = Enum.TextXAlignment.Left
+	padding.TextYAlignment = Enum.TextYAlignment.Bottom
+	padding.Text = "  " .. paddingText
+	
+	return padding
+end
+
+local function CreateFrame(parent, name, borderRounding, size, position, anchorPoint, color)
+	local frame_Position = position ~= nil and position or UDim2.new(0, 0, 0, 0)
+	local frame_AnchorPoint = anchorPoint ~= nil and anchorPoint or Vector2.new(0, 0)
+	
+	local frame = Instance.new("ImageLabel", parent)
+	frame.Name = name
+	frame.Image = "rbxassetid://3570695787"
+	frame.ImageColor3 = color == nil and APPLICATION_THEME.Color_Light or color
+	frame.ScaleType = Enum.ScaleType.Slice
+	frame.SliceCenter = Rect.new(Vector2.new(100, 100), Vector2.new(100, 100))
+	frame.SliceScale = 0.01 * borderRounding
+	frame.BackgroundTransparency = 1
+	frame.BorderSizePixel = 0
+	frame.Active = true
+	
+	frame.Size = size
+	frame.Position = frame_Position
+	frame.AnchorPoint = frame_AnchorPoint
+	
+	return frame
+end
+
+local function CreateDragHandle(parent, attachedGui, name, size, position, anchorPoint, text)
+	local handle_Size = size ~= nil and size or UDim2.new(1, 0, 1, 0)
+	local handle_Position = position ~= nil and position or UDim2.new(0, 0, 0, 0)
+	local handle_AnchorPoint = anchorPoint ~= nil and anchorPoint or Vector2.new(0, 0)
+	
+	local handle = Instance.new("TextButton", parent)
+	handle.Name = name
+	handle.Size = handle_Size
+	handle.Position = handle_Position
+	handle.AnchorPoint = handle_AnchorPoint
+	handle.BackgroundTransparency = 1
+	handle.Text = "  " .. text
+	handle.TextSize = 14
+	handle.Font = APPLICATION_THEME.TextFont_SemiBold
+	handle.TextXAlignment = Enum.TextXAlignment.Left
+	handle.TextColor3 = APPLICATION_THEME.TextColor
+	
+	local border = Instance.new("Frame", handle)
+	border.Name = "TitleBorder"
+	border.Size = UDim2.new(1, 0, 0, 1)
+	border.Position = UDim2.new(0.5, 0, 0, 20)
+	border.AnchorPoint = Vector2.new(0.5, 0)
+	border.BorderSizePixel = 0
+	border.Active = false
+	
+	local titleBorder_Gradient = Instance.new("UIGradient", border)
+	border.BackgroundColor3 = Color3.new(1, 1, 1)
+	titleBorder_Gradient.Transparency = NumberSequence.new{
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.05, 0.5),
+		NumberSequenceKeypoint.new(0.95, 0.5),
+		NumberSequenceKeypoint.new(1, 1)
+	}
+	
+	local closeButton = Instance.new("ImageButton", handle)
+	closeButton.Name = "CloseButton"
+	closeButton.Image = "rbxassetid://4389749368"
+	closeButton.Size = UDim2.new(0, 12, 0, 12)
+	closeButton.AnchorPoint = Vector2.new(0, 0.5)
+	closeButton.BackgroundTransparency = 1
+	closeButton.AutoButtonColor = false
+	closeButton.Position = UDim2.new(1, -18, 0.5, 0)
+	
+	local miniButton = Instance.new("ImageButton", handle)
+	miniButton.Name = "MinimizeButton"
+	miniButton.Image = "rbxassetid://4530358017"
+	miniButton.Size = UDim2.new(0, 12, 0, 12)
+	miniButton.AnchorPoint = Vector2.new(0, 0.5)
+	miniButton.BackgroundTransparency = 1
+	miniButton.AutoButtonColor = false
+	miniButton.Position = UDim2.new(1, -37, 0.5, 0)
+	
+	-- Enable Disable
+	--[[
+	miniButton.MouseButton1Click:Connect(function()
+		if APPLICATION_MINIMIZED then
+			windowMinimized = false
+			
+			parent.Options_Container.Visible = true
+			parent.Size = UDim2.new(0, windowSize.X, 0, windowSize.Y)
+		else
+			windowMinimized = true
+			
+			parent.Options_Container.Visible = false
+			parent.Size = UDim2.new(0, windowSize.X, 0, 18)
+			
+			localPlayer.CameraMinZoomDistance = before_CameraMinZoom
+			localPlayer.CameraMaxZoomDistance = before_CameraMaxZoom
+		end
+	end)
+	]]
+	
+	closeButton.MouseButton1Click:Connect(function()
+		SCRIPT_ENABLED = false
+		attachedGui:Destroy()
+	end)
+	
+	
+	
+	local dragging = false
+	
+	handle.MouseButton1Down:Connect(function()
+		dragging = true
+		
+		local dragStartOffset = Vector2.new(MOUSE.X, MOUSE.Y) - handle.AbsolutePosition
+		
+		repeat
+			parent.Position = UDim2.new(0, MOUSE.X - dragStartOffset.X, 0, MOUSE.Y - dragStartOffset.Y)
+			
+			game:GetService("RunService").RenderStepped:Wait()
+		until dragging == false
+	end)
+	
+	handle.MouseButton1Up:Connect(function()
+		dragging = false
+	end)
+	
+	return handle
+end
+
+local function CreateScrollingFrame(parent, name, size, position, anchorPoint, padding)
+	local container_Position = position ~= nil and position or UDim2.new(0, 0, 0, 0)
+	local container_AnchorPoint = anchorPoint ~= nil and anchorPoint or Vector2.new(0, 0)
+	
+	local container = Instance.new("ScrollingFrame", parent)
+	container.Name = name
+	container.BorderSizePixel = 0
+	container.BackgroundTransparency = 1
+	container.ScrollingEnabled = true
+	container.Size = size
+	container.Position = container_Position
+	container.AnchorPoint = container_AnchorPoint
+	container.BottomImage = container.MidImage
+	container.TopImage = container.MidImage
+	container.ScrollBarThickness = 4
+	
+	local list = Instance.new("UIListLayout", container)
+	list.SortOrder = Enum.SortOrder.LayoutOrder
+	list.Padding = UDim.new(0, padding)
+	
+	local scrolling = false
+	local engaged = false
+	
+	container.CanvasSize = UDim2.new(0, 0, 0, 0)
+	
+	container.ChildAdded:Connect(function(c)
+		pcall(function()
+			wait()
+			container.CanvasSize = UDim2.new(0, 0, 0, list.AbsoluteContentSize.Y + c.AbsoluteSize.Y + ELEMENT_CONTAINER_EXTRA_PADDING)
+		end)
+	end)
+	
+	container.ChildRemoved:Connect(function(c)
+		pcall(function()
+			wait()
+			container.CanvasSize = UDim2.new(0, 0, 0, list.AbsoluteContentSize.Y - c.AbsoluteSize.Y + ELEMENT_CONTAINER_EXTRA_PADDING)
+		end)
+	end)
+	
+	return container
+end
+
+-- Elements
+local function CreateSlider(parent, name, titleText, min, max, defaultValue, inputSuffix)
+	local suffix = inputSuffix ~= nil and inputSuffix or ""
+	
+	local elementContainer = Instance.new("Frame", parent)
+	elementContainer.Name = "ElementContainer"
+	elementContainer.BackgroundTransparency = 1
+	elementContainer.Size = UDim2.new(1, 0, 0, ELEMENT_CONTAINER_HEIGHT)
+	
+	local elementTitle = Instance.new("TextLabel", elementContainer)
+	elementTitle.Name = "Title"
+	elementTitle.Size = UDim2.new(1, -ELEMENT_TITLE_PADDING, 1, 0)
+	elementTitle.Position = UDim2.new(1, 0, 0, 0)
+	elementTitle.AnchorPoint = Vector2.new(1, 0)
+	elementTitle.BackgroundTransparency = 1
+	elementTitle.TextColor3 = APPLICATION_THEME.TextColor
+	elementTitle.TextXAlignment = Enum.TextXAlignment.Left
+	elementTitle.Font = APPLICATION_THEME.TextFont_SemiBold
+	elementTitle.TextSize = 13
+	elementTitle.Text = titleText
+	
+	-- Element
+	local sliderBackground = CreateFrame(elementContainer, "SliderBackground", 3, UDim2.new(1, -180, 0, 7), UDim2.new(1, -10, 0.5, 0), Vector2.new(1, 0.5), APPLICATION_THEME.Slider_Background_Color)
+	local sliderBar = CreateFrame(sliderBackground, "SliderBar", 3, UDim2.new(Lerp(0, 1, (defaultValue - min) / (max - min)), 0, 1, 0), UDim2.new(0, 0, 0, 0), Vector2.new(0, 0), APPLICATION_THEME.Slider_Bar_Color)
+	
+	local sliderClickBox = Instance.new("TextButton", sliderBackground)
+	sliderClickBox.Name = "ClickBox"
+	sliderClickBox.BackgroundTransparency = 1
+	sliderClickBox.Text = ""
+	sliderClickBox.Size = UDim2.new(1, 0, 1, 0)
+	
+	local valueTextLabel = Instance.new("TextLabel", sliderClickBox)
+	valueTextLabel.Name = "ValueLabel"
+	valueTextLabel.BackgroundTransparency = 1
+	valueTextLabel.Size = UDim2.new(0, 1000, 0, 14)
+	valueTextLabel.Font = APPLICATION_THEME.TextFont_SemiBold
+	valueTextLabel.TextSize = 12
+	valueTextLabel.TextColor3 = APPLICATION_THEME.TextColor
+	valueTextLabel.TextTransparency = 1
+	valueTextLabel.Text = ""
+	
+	-- Functionality
+	local mouseDown = false
+	local currentValue = defaultValue
+	
+	sliderClickBox.MouseButton1Down:Connect(function()
+		mouseDown = true
+		
+		do
+			local goal = {}
+			goal.TextTransparency = 0
+			
+			local tweenInfo = TweenInfo.new(0.25, Enum.EasingStyle.Cubic, Enum.EasingDirection.InOut)
+			
+			local tween = game:GetService("TweenService"):Create(valueTextLabel, tweenInfo, goal)
+			tween:Play()
+		end
+		
+		repeat
+			local dt = game:GetService("RunService").RenderStepped:Wait()
+			
+			local alpha = (MOUSE.X - sliderClickBox.AbsolutePosition.X) / sliderClickBox.AbsoluteSize.X
+			alpha = math.clamp(alpha, 0, 1)
+			
+			sliderBar.Size = UDim2.new(Lerp(sliderBar.Size.X.Scale, alpha, 1 - (0.0000001 ^ dt)), 0, 1, 0)
+			
+			-- Label
+			local realAlpha = sliderBar.AbsoluteSize.X / sliderBackground.AbsoluteSize.X
+			local realValue = Lerp(min, max, sliderBar.AbsoluteSize.X / sliderBackground.AbsoluteSize.X)
+			local realValueShortened = math.floor((realValue * (10 ^ SLIDER_MAX_DECIMAL_PLACES)) + 0.5) / (10 ^ SLIDER_MAX_DECIMAL_PLACES)
+			
+			currentValue = realValue
+			valueTextLabel.Text = realValueShortened .. suffix
+			
+			valueTextLabel.AnchorPoint = Vector2.new(0.5, 0)
+			valueTextLabel.Position = UDim2.new(realAlpha, 0, 1, 4)
+			valueTextLabel.ZIndex = 100
+		until mouseDown == false
+		
+		do
+			local goal = {}
+			goal.TextTransparency = 1
+			
+			local tweenInfo = TweenInfo.new(0.25, Enum.EasingStyle.Cubic, Enum.EasingDirection.InOut)
+			
+			local tween = game:GetService("TweenService"):Create(valueTextLabel, tweenInfo, goal)
+			tween:Play()
+		end
+	end)
+	
+	game:GetService("UserInputService").InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			mouseDown = false
+			wait(0.25)
+			valueTextLabel.ZIndex = 1
+		end
+	end)
+	
+	-- Return
+	local t = {}
+	
+	function t.GetValue()
+		return currentValue
+	end
+	
+	return t
+end
+
+local function CreateSwitch(parent, name, titleText, onByDefault)
+	local elementContainer = Instance.new("Frame", parent)
+	elementContainer.Name = "ElementContainer"
+	elementContainer.BackgroundTransparency = 1
+	elementContainer.Size = UDim2.new(1, 0, 0, ELEMENT_CONTAINER_HEIGHT)
+	
+	local elementTitle = Instance.new("TextLabel", elementContainer)
+	elementTitle.Name = "Title"
+	elementTitle.Size = UDim2.new(1, -ELEMENT_TITLE_PADDING, 1, 0)
+	elementTitle.Position = UDim2.new(1, 0, 0, 0)
+	elementTitle.AnchorPoint = Vector2.new(1, 0)
+	elementTitle.BackgroundTransparency = 1
+	elementTitle.TextColor3 = APPLICATION_THEME.TextColor
+	elementTitle.TextXAlignment = Enum.TextXAlignment.Left
+	elementTitle.Font = APPLICATION_THEME.TextFont_SemiBold
+	elementTitle.TextSize = 13
+	elementTitle.Text = titleText
+	
+	-- Element
+	local backgroundColor = onByDefault and APPLICATION_THEME.Switch_On_Color or APPLICATION_THEME.Switch_Off_Color
+	
+	local switchBackground = CreateFrame(elementContainer, "SliderBackground", 7, UDim2.new(0, 30, 0, 13), UDim2.new(1, -181, 0.5, 0), Vector2.new(1, 0.5), backgroundColor)
+	
+	local knob = Instance.new("ImageLabel", switchBackground)
+	knob.Name = "Knob"
+	knob.Image = "rbxassetid://3570695787"
+	knob.BackgroundTransparency = 1
+	knob.ImageColor3 = APPLICATION_THEME.Switch_Knob_Color
+	knob.Size = UDim2.new(0, 11, 0, 11)
+	knob.Position = UDim2.new(0, 1, 0.5, 0)
+	knob.AnchorPoint = Vector2.new(0, 0.5)
+	
+	local switchClickBox = Instance.new("TextButton", switchBackground)
+	switchClickBox.Name = "ClickBox"
+	switchClickBox.BackgroundTransparency = 1
+	switchClickBox.Text = ""
+	switchClickBox.Size = UDim2.new(1, 0, 1, 0)
+	
+	-- Functionality
+	local switchUpdated = false
+	local switchOn = not onByDefault
+	
+	local firstUpdate = false
+	
+	local function UpdateSwitch()
+		switchOn = not switchOn
+		
+		switchUpdated = true
+		
+		if firstUpdate == false then
+			firstUpdate = true
+			switchUpdated = false
+		end
+		
+		
+		
+		local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.InOut)
+		
+		if switchOn then
+			local goal_1 = {}
+			goal_1.AnchorPoint = Vector2.new(1, 0.5)
+			goal_1.Position = UDim2.new(1, -1, 0.5, 0)
+			
+			local goal_2 = {}
+			goal_2.ImageColor3 = APPLICATION_THEME.Switch_On_Color
+			
+			local tween_1 = game:GetService("TweenService"):Create(knob, tweenInfo, goal_1) tween_1:Play()
+			local tween_1 = game:GetService("TweenService"):Create(switchBackground, tweenInfo, goal_2) tween_1:Play()
+		else
+			local goal_1 = {}
+			goal_1.AnchorPoint = Vector2.new(0, 0.5)
+			goal_1.Position = UDim2.new(0, 1, 0.5, 0)
+			
+			local goal_2 = {}
+			goal_2.ImageColor3 = APPLICATION_THEME.Switch_Off_Color
+			
+			local tween_1 = game:GetService("TweenService"):Create(knob, tweenInfo, goal_1) tween_1:Play()
+			local tween_1 = game:GetService("TweenService"):Create(switchBackground, tweenInfo, goal_2) tween_1:Play()
+		end
+	end
+	
+	switchClickBox.MouseButton1Click:Connect(function()
+		UpdateSwitch()
+	end)
+	
+	UpdateSwitch()
+	
+	-- Return
+	local t = {}
+	
+	function t.ValueChanged()
+		local r = switchUpdated
+		switchUpdated = false
+		
+		return r
+	end
+	
+	function t.GetValue()
+		return switchOn
+	end
+	
+	return t
+end
+
+local function CreateKeybind(parent, name, titleText, defaultKeyCode) -- Allows you to set keybinds
+	local elementContainer = Instance.new("Frame", parent)
+	elementContainer.Name = "ElementContainer"
+	elementContainer.BackgroundTransparency = 1
+	elementContainer.Size = UDim2.new(1, 0, 0, ELEMENT_CONTAINER_HEIGHT)
+	
+	local elementTitle = Instance.new("TextLabel", elementContainer)
+	elementTitle.Name = "Title"
+	elementTitle.Size = UDim2.new(1, -ELEMENT_TITLE_PADDING, 1, 0)
+	elementTitle.Position = UDim2.new(1, 0, 0, 0)
+	elementTitle.AnchorPoint = Vector2.new(1, 0)
+	elementTitle.BackgroundTransparency = 1
+	elementTitle.TextColor3 = APPLICATION_THEME.TextColor
+	elementTitle.TextXAlignment = Enum.TextXAlignment.Left
+	elementTitle.Font = APPLICATION_THEME.TextFont_SemiBold
+	elementTitle.TextSize = 13
+	elementTitle.Text = titleText
+	
+	local background = CreateFrame(elementContainer, "Background", 5, UDim2.new(0, 90, 0, 15), UDim2.new(0, 170, 0.5, 0), Vector2.new(0, 0.5))
+	background.Name = "Background"
+	background.ImageColor3 = APPLICATION_THEME.Keybind_NotEngaged_Color
+	
+	local clickBox = Instance.new("TextButton", background)
+	clickBox.Name = "ClickBox"
+	clickBox.BackgroundTransparency = 1
+	clickBox.Font = APPLICATION_THEME.TextFont_SemiBold
+	clickBox.TextSize = 12
+	clickBox.Size = UDim2.new(1, 0, 1, 0)
+	clickBox.TextColor3 = APPLICATION_THEME.TextColor
+	clickBox.Text = string.sub(tostring(defaultKeyCode), 14, string.len(tostring(defaultKeyCode)))
+	
+	-- Functionality
+	local engaged = false
+	
+	local function Update(keyName, isEngaged)
+		local textWidth = game:GetService("TextService"):GetTextSize(keyName, 12, APPLICATION_THEME.TextFont_SemiBold, Vector2.new(math.huge, math.huge)).X
+		background.Size = UDim2.new(0, textWidth + 14, 0, 15)
+		
+		if isEngaged then
+			background.ImageColor3 = APPLICATION_THEME.Keybind_Engaged_Color
+		else
+			background.ImageColor3 = APPLICATION_THEME.Keybind_NotEngaged_Color
+		end
+	end
+	
+	Update(clickBox.Text, engaged)
+	
+	game:GetService("UserInputService").InputBegan:Connect(function(key)
+		if engaged then
+			local keyName = tostring(key.KeyCode)
+			keyName = string.sub(keyName, 14, string.len(keyName))
+			
+			if keyName ~= "Unknown" then
+				engaged = false
+				clickBox.Text = keyName
+				
+				-- Tween
+				Update(keyName, engaged)
+			end
+		end
+	end)
+	
+	clickBox.MouseButton1Click:Connect(function()
+		engaged = true
+		
+		-- Tween
+		Update(clickBox.Text, engaged)
+	end)
+	
+	-- Return
+	local t = {}
+	
+	function t.GetKeyCode()
+		return Enum.KeyCode[clickBox.Text]
+	end
+	
+	return t
+end
+
+local function CreateButton(parent, name, titleText, buttonText) -- Allows you to set keybinds
+	local elementContainer = Instance.new("Frame", parent)
+	elementContainer.Name = "ElementContainer"
+	elementContainer.BackgroundTransparency = 1
+	elementContainer.Size = UDim2.new(1, 0, 0, ELEMENT_CONTAINER_HEIGHT)
+	
+	local elementTitle = Instance.new("TextLabel", elementContainer)
+	elementTitle.Name = "Title"
+	elementTitle.Size = UDim2.new(1, -ELEMENT_TITLE_PADDING, 1, 0)
+	elementTitle.Position = UDim2.new(1, 0, 0, 0)
+	elementTitle.AnchorPoint = Vector2.new(1, 0)
+	elementTitle.BackgroundTransparency = 1
+	elementTitle.TextColor3 = APPLICATION_THEME.TextColor
+	elementTitle.TextXAlignment = Enum.TextXAlignment.Left
+	elementTitle.Font = APPLICATION_THEME.TextFont_SemiBold
+	elementTitle.TextSize = 13
+	elementTitle.Text = titleText
+	
+	local button = CreateFrame(elementContainer, "ButtonBackground", 4, UDim2.new(0, 90, 0, 15), UDim2.new(0, 170, 0.5, 0), Vector2.new(0, 0.5))
+	button.ImageColor3 = APPLICATION_THEME.Button_NotEngaged_Color
+	
+	local clickBox = Instance.new("TextButton", button)
+	clickBox.Name = "ClickBox"
+	clickBox.BackgroundTransparency = 1
+	clickBox.Font = APPLICATION_THEME.TextFont_SemiBold
+	clickBox.TextSize = 12
+	clickBox.Size = UDim2.new(1, 0, 1, 0)
+	clickBox.TextColor3 = APPLICATION_THEME.TextColor
+	clickBox.Text = buttonText
+	
+	-- Functionality
+	local pressed = false
+	local mouseEnter = false
+	
+	clickBox.MouseEnter:Connect(function()
+		button.ImageColor3 = APPLICATION_THEME.Button_Engaged_Color
+		mouseEnter = true
+	end)
+	
+	clickBox.MouseLeave:Connect(function()
+		button.ImageColor3 = APPLICATION_THEME.Button_NotEngaged_Color
+		mouseEnter = false
+	end)
+	
+	clickBox.MouseButton1Click:Connect(function()
+		pressed = true
+		
+		button.ImageColor3 = APPLICATION_THEME.Button_NotEngaged_Color
+		wait()
+		button.ImageColor3 = APPLICATION_THEME.Button_Engaged_Color
+	end)
+	
+	-- Return
+	local t = {}
+	
+	function t.ButtonPressed()
+		local p = pressed
+		pressed = false
+		
+		return p
+	end
+	
+	function t.HoveringOver()
+		return mouseEnter
+	end
+	
+	return t
+end
+
+local function CreateInput(parent, name, titleText) -- Allows the user to provide input
+	local elementContainer = Instance.new("Frame", parent)
+	elementContainer.Name = "ElementContainer"
+	elementContainer.BackgroundTransparency = 1
+	elementContainer.Size = UDim2.new(1, 0, 0, ELEMENT_CONTAINER_HEIGHT)
+	
+	local elementTitle = Instance.new("TextLabel", elementContainer)
+	elementTitle.Name = "Title"
+	elementTitle.Size = UDim2.new(1, -ELEMENT_TITLE_PADDING, 1, 0)
+	elementTitle.Position = UDim2.new(1, 0, 0, 0)
+	elementTitle.AnchorPoint = Vector2.new(1, 0)
+	elementTitle.BackgroundTransparency = 1
+	elementTitle.TextColor3 = APPLICATION_THEME.TextColor
+	elementTitle.TextXAlignment = Enum.TextXAlignment.Left
+	elementTitle.Font = APPLICATION_THEME.TextFont_SemiBold
+	elementTitle.TextSize = 13
+	elementTitle.Text = titleText
+	
+	local background = CreateFrame(elementContainer, "ButtonBackground", 4, UDim2.new(1, -180, 0, 15), UDim2.new(0, 170, 0.5, 0), Vector2.new(0, 0.5))
+	background.ImageColor3 = APPLICATION_THEME.Input_Background_Color
+	
+	local inputBox = Instance.new("TextBox", background)
+	inputBox.Name = "InputBox"
+	inputBox.BackgroundTransparency = 1
+	inputBox.Font = APPLICATION_THEME.TextFont_SemiBold
+	inputBox.TextSize = 12
+	inputBox.Size = UDim2.new(1, -5, 1, 0)
+	inputBox.TextXAlignment = Enum.TextXAlignment.Left
+	inputBox.AnchorPoint = Vector2.new(1, 0)
+	inputBox.Position = UDim2.new(1, 0, 0, 0)
+	inputBox.TextColor3 = APPLICATION_THEME.TextColor
+	inputBox.Text = "Enter Here"
+	
+	-- Functionality
+	local textChanged = false
+	local previousText = inputBox.Text
+	
+	inputBox.FocusLost:Connect(function()
+		if previousText ~= inputBox.Text then
+			textChanged = true
+		end
+		
+		previousText = inputBox.Text
+	end)
+	
+	-- Return
+	local t = {}
+	
+	function t.InputChanged()
+		local v = textChanged
+		textChanged = false
+		
+		return v
+	end
+	
+	function t.GetText()
+		return inputBox.Text
+	end
+	
+	function t.SetText(t)
+		inputBox.Text = t
+	end
+	
+	return t
+end
+
+local function CreateColorPicker(parent, name, titleText)
+	local elementContainer = Instance.new("Frame", parent)
+	elementContainer.Name = "ElementContainer"
+	elementContainer.BackgroundTransparency = 1
+	elementContainer.Size = UDim2.new(1, 0, 0, 160)
+	
+	local elementTitle = Instance.new("TextLabel", elementContainer)
+	elementTitle.Name = "Title"
+	elementTitle.Size = UDim2.new(1, -ELEMENT_TITLE_PADDING, 1, 0)
+	elementTitle.Position = UDim2.new(1, 0, 0, 0)
+	elementTitle.AnchorPoint = Vector2.new(1, 0)
+	elementTitle.BackgroundTransparency = 1
+	elementTitle.TextColor3 = APPLICATION_THEME.TextColor
+	elementTitle.TextXAlignment = Enum.TextXAlignment.Left
+	elementTitle.Font = APPLICATION_THEME.TextFont_SemiBold
+	elementTitle.TextSize = 13
+	elementTitle.Text = titleText
+	
+	-- Gradient Map
+	local backplate = Instance.new("Frame", elementContainer)
+	backplate.Name = "Backplate"
+	backplate.BorderSizePixel = 0
+	backplate.BackgroundColor3 = Color3.new(0, 0, 0)
+	backplate.Position = UDim2.new(0, 10, 0, 20)
+	backplate.Size = UDim2.new(0, 100, 0, 100)
+	
+	local colorGradientBox = Instance.new("ImageLabel", backplate)
+	colorGradientBox.Name = "ColorGradientBox"
+	colorGradientBox.Image = "rbxassetid://1280017782"
+	colorGradientBox.Size = UDim2.new(1, 0, 1, 0)
+	colorGradientBox.Position = UDim2.new(0, 0, 0, 0)
+	colorGradientBox.Rotation = 90
+	colorGradientBox.BackgroundTransparency = 1
+	
+	local whiteGradientBox = Instance.new("ImageLabel", backplate)
+	whiteGradientBox.Name = "WhiteGradientBox"
+	whiteGradientBox.Image = "rbxassetid://1280017782"
+	whiteGradientBox.ImageColor3 = Color3.new(1, 1, 1)
+	whiteGradientBox.Size = UDim2.new(1, 0, 1, 0)
+	whiteGradientBox.Position = UDim2.new(0, 0, 0, 0)
+	whiteGradientBox.BackgroundTransparency = 1
+	
+	local blackGradientBox = Instance.new("ImageLabel", backplate)
+	blackGradientBox.Name = "BlackGradientBox"
+	blackGradientBox.Image = "rbxassetid://1280017782"
+	blackGradientBox.ImageColor3 = Color3.new(0, 0, 0)
+	blackGradientBox.Size = UDim2.new(1, 0, 1, 0)
+	blackGradientBox.Position = UDim2.new(0, 0, 0, 0)
+	blackGradientBox.Rotation = -90
+	blackGradientBox.BackgroundTransparency = 1
+	
+	-- Color Map
+	local backplate2 = Instance.new("Frame", elementContainer)
+	backplate2.Name = "Backplate2"
+	backplate2.BorderSizePixel = 0
+	backplate2.BackgroundColor3 = Color3.new(0, 0, 0)
+	backplate2.Position = UDim2.new(0, 115, 0, 20)
+	backplate2.Size = UDim2.new(0, 100, 0, 100)
+	
+	local colorMap = Instance.new("ImageLabel", backplate2)
+	colorMap.Name = "ColorMap"
+	colorMap.Image = "rbxassetid://5425155739"
+	colorMap.Size = UDim2.new(1, 0, 1, 0)
+	colorMap.Position = UDim2.new(0, 0, 0, 0)
+	colorMap.BackgroundTransparency = 1
+	
+	local desaturatedMap = Instance.new("ImageLabel", backplate2)
+	desaturatedMap.Name = "DesaturatedMap"
+	desaturatedMap.Image = "rbxassetid://5425157396"
+	desaturatedMap.Size = UDim2.new(1, 0, 1, 0)
+	desaturatedMap.Position = UDim2.new(0, 0, 0, 0)
+	desaturatedMap.BackgroundTransparency = 1
+	
+	spawn(function()
+		local t = 0
+		local t2 = 0
+		
+		while true do
+			local dt = game:GetService("RunService").RenderStepped:Wait()
+			t = t + (dt / 2) if t > 1 then t = 0 end
+			t2 = t2 + (dt * 2)
+			
+			colorGradientBox.ImageColor3 = Color3.fromHSV(t, 1, 1)
+			
+			desaturatedMap.ImageTransparency = math.sin(t2) / 2 + 0.5
+		end
+	end)
+end
+
+local function CreateOutput(parent, name, elementCount) -- Allows the script to show the user info
+	local elementContainer = Instance.new("Frame", parent)
+	elementContainer.Name = "ElementContainer"
+	elementContainer.BackgroundTransparency = 1
+	elementContainer.Size = UDim2.new(1, 0, 0, 18 * elementCount + 6)
+	
+	local background = CreateFrame(elementContainer, "ButtonBackground", 4, UDim2.new(1, -20, 0, 18 * elementCount), UDim2.new(0.5, 0, 0.5, 0), Vector2.new(0.5, 0.5))
+	background.ImageColor3 = APPLICATION_THEME.Input_Background_Color
+	
+	local elements = {} -- Table which store the individual status text labels
+	
+	for i = 1, elementCount do
+		local label = Instance.new("TextBox", background)
+		label.Name = "InputBox"
+		label.BackgroundTransparency = 1
+		label.Font = Enum.Font.Code --APPLICATION_THEME.TextFont_SemiBold
+		label.TextSize = 14
+		label.Size = UDim2.new(1, -5, 0, 15)
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.AnchorPoint = Vector2.new(1, 0)
+		label.Position = UDim2.new(1, 0, 0, 18 * (i - 1) + 1)
+		label.TextColor3 = APPLICATION_THEME.TextColor
+		label.Text = ""
+		
+		table.insert(elements, label)
+	end
+	
+	-- Return
+	local t = {}
+	
+	function t.EditStatus(id, text)
+		elements[id].Text = text
+	end
+	
+	return t
+end
+
+-- Math Functions
+local function RoundNumber(number, decimals)
+	local multiplier = 10 ^ decimals
+	
+	return math.floor(number * multiplier + 0.5) / multiplier
+end
+
+
+
+
+
+
+
+-- Application Gui
+local APP_GUI = CreateGui(APPLICATION_GUI_PARENT, "APPLICATION", false, false)
+
+local mainFrame = CreateFrame(APP_GUI, "MainFrame", 3, APPLICATION_SIZE, UDim2.new(0, 0, 0, 0))
+mainFrame.ClipsDescendants = true
+
+local dragHandle = CreateDragHandle(mainFrame, APP_GUI, "DragHandle", UDim2.new(1, 0, 0, 20), nil, nil, "Unit 1968 Hax")
+
+local elements_Container = CreateScrollingFrame(mainFrame, "ElementsContainer", UDim2.new(1, 0, 1, -22), UDim2.new(0, 0, 0, 22), nil, 0)
+
+-- ESP
+AddPadding(elements_Container, 17, "Silent Aim")
+local switch_SilentAim = CreateSwitch(elements_Container, "", "Silent Aim", true)
+
+AddPadding(elements_Container, 4)
+local switch_TeamCheck = CreateSwitch(elements_Container, "", "Team Check", true)
+local switch_WallCheck = CreateSwitch(elements_Container, "", "Wall Check", true)
+local switch_AimAtHead = CreateSwitch(elements_Container, "", "Aim For Head", true)
+
+AddPadding(elements_Container, 4)
+local slider_SilentAimAngle = CreateSlider(elements_Container, "", "Silent Aim Angle", 0, 200, 30, "")
+
+AddPadding(elements_Container, 17, "GUI")
+local slider_ShowMarkers = CreateSwitch(elements_Container, "", "Show Markers", true)
+
+
+
+local function CreateCrosshair(parent, color)
+	local radius = 7
+	local smoothing = 0.04
+	
+	local hasMoved = false
+	
+	local markerLine_1 = Instance.new("Frame", parent)
+	markerLine_1.Name = "MarkerLine"
+	markerLine_1.AnchorPoint = Vector2.new(0.5, 0.5)
+	markerLine_1.Position = UDim2.new(0, 0, 1000000, 0)
+	markerLine_1.Size = UDim2.new(0, 11, 0, 2)
+	markerLine_1.BackgroundColor3 = color
+	markerLine_1.BorderSizePixel = 0
+	markerLine_1.Rotation = 45
+	
+	local markerLine_2 = markerLine_1:Clone()
+	markerLine_2.Parent = parent
+	markerLine_2.Rotation = -45
+	
+	local markerLine_3 = markerLine_1:Clone()
+	markerLine_3.Parent = parent
+	markerLine_3.Rotation = -45
+	
+	local markerLine_4 = markerLine_1:Clone()
+	markerLine_4.Parent = parent
+	markerLine_4.Rotation = 45
+	
+	
+	local t = {}
+	
+	function t.Move(posX, posY)
+		local goal_1 = {} markerLine_1.Position = UDim2.new(0, posX - radius, 0, posY - radius)
+		local goal_2 = {} markerLine_2.Position = UDim2.new(0, posX + radius, 0, posY - radius)
+		local goal_3 = {} markerLine_3.Position = UDim2.new(0, posX - radius, 0, posY + radius)
+		local goal_4 = {} markerLine_4.Position = UDim2.new(0, posX + radius, 0, posY + radius)
+	end
+	
+	function t.ChangeRadius(r)
+		radius = r
+	end
+	
+	function t.ChangeColor(c)
+		markerLine_1.BackgroundColor3 = c
+		markerLine_2.BackgroundColor3 = c
+		markerLine_3.BackgroundColor3 = c
+		markerLine_4.BackgroundColor3 = c
+	end
+	
+	function t.Destroy()
+		markerLine_1:Destroy()
+		markerLine_2:Destroy()
+		markerLine_3:Destroy()
+		markerLine_4:Destroy()
+	end
+	
+	return t
+end
+
+local marker = CreateCrosshair(APP_GUI, Color3.fromRGB(255, 255, 255))
+local circle = Instance.new("ImageLabel", APP_GUI)
+circle.Name = "Circle"
+circle.Image = "rbxassetid://5626240331"
+circle.BackgroundTransparency = 1
+circle.AnchorPoint = Vector2.new(0.5, 0.5)
+circle.Position = UDim2.new(0.5, 0, 0.5, -18)
+
+local playerAimingAt = nil
+local lastShootTick = tick()
+
+local function RecordRemote(self, callerScript, arguments)
+	if SCRIPT_ENABLED then
+		if self.Name == "Bullet" and playerAimingAt and switch_SilentAim.GetValue() == true then
+			local myChar = LOCAL_PLAYER.Character
+			
+			if myChar then
+				if myChar:FindFirstChild("Gun") then
+					local success, errMsg = pcall(function()
+						if tick() - lastShootTick > 0.017 then
+							lastShootTick = tick()
+							
+							local check = true
+							
+							local loadoutFolder = game.Players.LocalPlayer.Loadout
+							local teamName = game.Players.LocalPlayer.TeamC.Value == "USA" and "US" or "NVA"
+							
+							local gunName = loadoutFolder[teamName][loadoutFolder.Class.Value].Primary.Value
+							local gunInfo = game.ReplicatedStorage.Weapons[gunName]
+							
+							local hitPart = switch_AimAtHead.GetValue() == true and playerAimingAt.Character.Head or playerAimingAt.Character.UpperTorso
+							
+							if switch_WallCheck.GetValue() == true then
+								pcall(function()
+									local ignore = workspace.Map.Ignore:GetDescendants()
+									
+									for _, v in pairs(LOCAL_PLAYER.Character:GetDescendants()) do
+										table.insert(ignore, v)
+									end
+									
+									local params = RaycastParams.new()
+									params.FilterType = Enum.RaycastFilterType.Blacklist
+									params.IgnoreWater = true
+									params.FilterDescendantsInstances = ignore
+									
+									local result = workspace:Raycast(workspace.CurrentCamera.CFrame.Position, (hitPart.Position - workspace.CurrentCamera.CFrame.Position).Unit * 5000, params)
+									
+									if result then
+										if not (game.Players:GetPlayerFromCharacter(result.Instance.Parent) or game.Players:GetPlayerFromCharacter(result.Instance.Parent.Parent)) then
+											check = false
+										end
+									end
+								end)
+							end
+							
+							if check then
+								game.Workspace["HIT_REGISTER"].Bullet:FireServer(
+									hitPart, 
+									hitPart.Position, 
+									Vector3.new(0, 0, 0), 
+									gunName, 
+									gunInfo["Damage"].Value, 
+									switch_AimAtHead.GetValue() == true and 1 or 0, 
+									gunInfo["Range"].Value, 
+									nil, 
+									myChar.Gun, 
+									Vector3.new(0, 0, 0), 
+									workspace.DistributedTime.Value, 
+									1
+								)
+							end
+						end
+					end)
+					
+					if not success then
+						warn(errMsg)
+					end
+				end
+			end
+		end
+	end
+end
+
+
+
+local ENABLED_TYPES = {
+	BindableEvent = false,
+	BindableFunction = false,
+	RemoteEvent = true,
+	RemoteFunction = true
+}
+
+local REMOTE_CALL_METHODS_REFERENCE = {
+	BindableEvent = "Fire",
+	BindableFunction = "Invoke",
+	RemoteEvent = "FireServer",
+	RemoteFunction = "InvokeServer"
+}
+
+local REMOTE_CALL_METHODS = REMOTE_CALL_METHODS_REFERENCE
+
+local metatable = getrawmetatable(game)
+if setreadonly then
+	setreadonly(metatable, false)
+end
+
+local __namecall = __namecall or metatable.__namecall
+local __index = __index or metatable.__index
+if getgenv then
+	if removeSpy then
+		removeSpy()
+	end
+	getgenv().__namecall = __namecall
+	getgenv().__index = __index
+	getgenv().removeSpy = function()
+		getgenv().removeSpy = nil
+		metatable.__namecall = __namecall
+		metatable.__index = __index
+	end
+end
+
+local function LocalizedRemoteCallback(class)
+	return newcclosure(function(self, ...)
+		if typeof(self) ~= "Instance" then
+			error(select(2, pcall(REMOTE_CALL_METHODS_REFERENCE[class], self)), 0)
+		end
+		
+		if self.ClassName ~= class then
+			error(select(2, pcall(REMOTE_CALL_METHODS_REFERENCE[class], self)), 0)
+		end
+		
+		local arguments = {...};
+		local result	= {};
+		
+		local callerScript = rawget(getfenv(0), "script")
+		callerScript = typeof(callerScript) == "Instance" and callerScript or nil
+		
+		if ENABLED_TYPES[self.ClassName] then
+			RecordRemote(self, callerScript, arguments)
+		end
+		
+		return unpack({REMOTE_CALL_METHODS[class](self, ...)})
+	end)
+end
+
+LocalizedRemoteCallback  = newcclosure(LocalizedRemoteCallback)
+
+for className, func in next, REMOTE_CALL_METHODS do
+	REMOTE_CALL_METHODS[className] = hookfunc(Instance.new(className)[func], LocalizedRemoteCallback(className))
+end
+
+local function IsAuthorized(self, index)
+	local map = {
+		BindableEvent = "Fire",
+		BindableFunction = "Invoke",
+		RemoteEvent = "FireServer",
+		RemoteFunction = "InvokeServer"
+	}
+	
+	
+	if (not map[self.ClassName]) then
+		return false
+	end
+	
+	if (not rawequal(map[self.ClassName], index)) then
+		return false
+	end  
+	
+	if not ENABLED_TYPES[self.ClassName] then
+		return false
+	end
+	
+	return true
+end
+
+local LuaU = isluau()
+
+local RemoteCallback = newcclosure(function(self, ...)
+	if typeof(self) ~= "Instance" then
+		return error(select(2, pcall(__index, self))) -- magic
+	end
+	
+	local arguments = {...}	
+	local result = {}
+	local callerScript = rawget(getfenv(0), "script")
+	callerScript = typeof(callerScript) == "Instance" and callerScript or nil
+	
+	RecordRemote(self, callerScript, arguments)
+	
+	return unpack({REMOTE_CALL_METHODS[self.ClassName](self, ...)})
+end)
+
+function metatable:__namecall(...)
+	local arguments = {...}
+	local index = LuaU and getnamecallmethod() or table.remove(arguments)
+	if IsAuthorized(self, index) then
+		return RemoteCallback(self, unpack(arguments))
+	end
+	return __namecall(self, ...)
+end
+
+metatable.__namecall = newcclosure(metatable.__namecall)
+
+while SCRIPT_ENABLED do
+	local closestTarget = nil
+	local minDistance = math.huge
+	
+	local angle = slider_SilentAimAngle.GetValue()
+	circle.Size = UDim2.new(0, angle * 12, 0, angle * 12)
+	
+	for _, v in pairs(game.Players:GetPlayers()) do
+		if v.Character and v ~= LOCAL_PLAYER then
+			local checked = true
+			
+			if v.TeamColor == LOCAL_PLAYER.TeamColor and switch_TeamCheck.GetValue() == true then
+				checked = false
+			end
+			
+			if checked then
+				pcall(function()
+					if v.Character.Humanoid.Health > 0 then
+						local target = switch_AimAtHead.GetValue() == true and v.Character.Head or v.Character.UpperTorso
+						
+						local pos = workspace.CurrentCamera:WorldToScreenPoint(target.Position)
+						local d = (Vector2.new(pos.X, pos.Y) - Vector2.new(MOUSE.X, MOUSE.Y)).Magnitude
+						
+						if d < minDistance and d < angle * 6 and pos.Z > 0 then			
+							minDistance = d
+							closestTarget = target
+							playerAimingAt = v
+						end
+					end
+				end)
+			end
+		end
+	end
+	
+	if closestTarget and slider_ShowMarkers.GetValue() == true then
+		local check = true
+		
+		if switch_WallCheck.GetValue() == true then
+			pcall(function()
+				local ignore = workspace.Map.Ignore:GetDescendants()
+				
+				for _, v in pairs(LOCAL_PLAYER.Character:GetDescendants()) do
+					table.insert(ignore, v)
+				end
+				
+				local params = RaycastParams.new()
+				params.FilterType = Enum.RaycastFilterType.Blacklist
+				params.IgnoreWater = true
+				params.FilterDescendantsInstances = ignore
+				
+				local result = workspace:Raycast(workspace.CurrentCamera.CFrame.Position, (closestTarget.Position - workspace.CurrentCamera.CFrame.Position).Unit * 5000, params)
+				
+				if result then
+					if game.Players:GetPlayerFromCharacter(result.Instance.Parent) or game.Players:GetPlayerFromCharacter(result.Instance.Parent.Parent) then
+						marker.ChangeColor(Color3.new(0, 1, 0))
+					else
+						marker.ChangeColor(Color3.new(1, 0, 0))
+					end
+				end
+			end)
+		else
+			marker.ChangeColor(Color3.new(0, 1, 0))
+		end
+		
+		local pos = workspace.CurrentCamera:WorldToScreenPoint(closestTarget.Position)
+		marker.Move(pos.X, pos.Y)
+	else
+		marker.ChangeColor(Color3.new(0, 1, 0))
+		marker.Move(-1000, 0)
+	end
+	
+	game:GetService("RunService").RenderStepped:Wait()
+end
+
+marker:Destroy()
+circle:Destroy()
